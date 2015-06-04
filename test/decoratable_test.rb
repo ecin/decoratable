@@ -1,36 +1,21 @@
 require "test_helper"
 
 require "decoratable"
+require "decoratable/memoizable"
+require "decoratable/countable"
+require "decoratable/hintable"
+
 require "logger"
 
 describe Decoratable do
 
+  # Test-only decorations
   module Decorations
     extend Decoratable
 
-    # Not used in test
-    def disable(disabled = proc { true } )
-      disabled.call ? nil : yield
-    end
-
-    # Not used in tests
-    def debuggable
-      yield
-    rescue
-      binding.pry
-    end
-
-    # Not used in tests
-    def retryable(tries = 1, options = { on: [RuntimeError] } )
-      attempts = 0
-
-      begin
-        yield
-      rescue *options[:on]
-        attempts += 1
-        attempts > tries ? raise : retry
-      end
-    end
+    include Countable
+    include Hintable
+    include Memoizable
 
     def measurable(logger = Logger.new(STDOUT))
       current = Time.now
@@ -44,25 +29,6 @@ describe Decoratable do
       logger.info "#{marker} took #{duration}s to run."
     end
 
-    def memoizable
-      key = :"@#{__decorated_method__.name}_cache"
-
-      if instance_variable_defined?(key)
-        instance_variable_get key
-      else
-        instance_variable_set key, yield
-      end
-    end
-
-    def countable
-      key = :"@#{__decorated_method__.name}_count"
-
-      count = instance_variable_get(key).to_i
-      instance_variable_set(key, count + 1)
-
-      yield
-    end
-
     def auditable
       name = __decorated_method__.name
 
@@ -73,31 +39,11 @@ describe Decoratable do
 
       yield
     end
-
-    def hintable(*classes, require_block: false)
-      argument_names = __decorated_method__.parameters.map { |(_, param)| param }
-      checks = __args__.zip(classes, argument_names)
-
-      # check args for types
-      failed_check = checks.find { |arg, klass, _| !arg.is_a?(klass) }
-      if failed_check
-        raise ArgumentError, "#{failed_check[2]} expected argument of type #{failed_check[1]}, was #{failed_check[0].class} (#{failed_check[0].inspect})"
-      end
-
-      if require_block && __block__.nil?
-        raise ArgumentError, "#{__decorated_method__.name} requires a block"
-      end
-
-      yield
-    end
-
   end
 
   it "decorates a method" do
     klass = Class.new do
       extend Decorations
-
-      attr_reader :call_count
 
       countable
       def call; end
@@ -105,7 +51,7 @@ describe Decoratable do
 
     object = klass.new
     3.times { object.call }
-    object.call_count.must_equal 3
+    object.call_call_count.must_equal 3
   end
 
   it "can pass configuration arguments to the decoration" do
@@ -125,8 +71,6 @@ describe Decoratable do
     klass = Class.new do
       extend Decorations
 
-      attr_reader :call_count
-
       countable
       memoizable
       def call
@@ -139,7 +83,7 @@ describe Decoratable do
     3.times { object.call }
 
     # Check countable() works
-    object.call_count.must_equal 3
+    object.call_call_count.must_equal 3
 
     # Check memoizable() works
     object.call.must_equal 1
@@ -149,7 +93,7 @@ describe Decoratable do
     klass = Class.new do
       extend Decorations
 
-      attr_reader :call_count, :call2_count
+      attr_reader :call2_call_count
 
       countable
       def call; end
@@ -160,8 +104,8 @@ describe Decoratable do
     3.times { object.call }
     3.times { object.call2 }
 
-    object.call_count.must_equal 3
-    object.call2_count.must_equal nil
+    object.call_call_count.must_equal 3
+    object.call2_call_count.must_equal nil
   end
 
   it "allows access to the original decorated method" do
