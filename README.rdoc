@@ -1,0 +1,97 @@
+= Decoratable
+
+Provides an easy way to define decorations that add common behaviour to your methods.
+
+== Installation
+
+    gem install decoratable
+
+== Requirements
+
+Decoratable does its magic via Module#prepend, which means:
+
+* MRI (1.9.3 and up) OR
+* JRuby 9000
+
+== Usage
+
+    require "decoratable"
+
+    module Retryable
+      # All methods defined in this module can decorate methods
+      extend Decoratable
+
+      def retryable(tries = 1, options = { on: [RuntimeError] })
+        attempt = 0
+        # To invoke the original method, simply use `yield`
+        yield
+      rescue *options[:on]
+        attempt += 1
+        attempt > tries ? raise : retry
+      end
+    end
+
+    module Pryable
+      extend Decoratable
+
+      def pryable
+        yield
+      rescue => e
+        require "pry"
+        binding.pry
+      end
+    end
+
+    module Measurable
+      extend Decoratable
+
+      def measurable(logger = Logger.new(STDOUT))
+        start = Time.now
+        yield
+      ensure
+        # The decoration has access to the original method
+        # args and any block passed in the original method call are also available
+        # via __args__ and __block__ respectively
+        original_method = __decorated_method__
+
+        method_location, line = original_method.source_location
+        marker = "#{original_method.owner}##{original_method.name}[#{method_location}:#{line}]"
+        duration = (Time.now - start).round(2)
+
+        logger.info "#{marker} took #{duration}s to run."
+      end
+    end
+
+    class Client
+      extend Retryable
+
+      # This method will automatically retry on TimeoutErrors, up to 3 times
+      retryable(tries = 3, on: [TimeoutError])
+      def get
+        …
+      end
+
+      # If an error is raised in this method, we'll automatically get a pry session
+      # to help us debug it
+      pryable
+      def post
+        …
+      end
+
+      # Log the time this method takes to run
+      measurable
+      def delete
+        …
+      end
+    end
+
+Decoratable provides a handful of decorations as part of the gem:
+
+  * require "decoratable/countable": keep a count each time a method gets called
+  * require "decoratable/debuggable": open a Ruby debug console (i.e. require "debug") if an error is raised
+  * require "decoratable/hintable": add type hinting to your method arguments
+  * require "decoratable/memoizable": automatically memoize the return value of a method
+  * require "decoratable/pryable": open a Pry debug console (i.e. binding.pry) if an error is raised
+  * require "decoratable/retryable": automatically retry a number of times when a specified exception is raised
+
+More to be added as time goes on.
