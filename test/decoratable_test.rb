@@ -1,7 +1,4 @@
-require "minitest/autorun"
-require "minitest/mock"
-require "minitest/pride"
-require "pry"
+require "test_helper"
 
 require "decoratable"
 require "logger"
