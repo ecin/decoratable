@@ -63,6 +63,8 @@ Decoratable does its magic via Module#prepend, which means:
     end
 
     class Client
+      extend Measurable
+      extend Pryable
       extend Retryable
 
       # This method will automatically retry on TimeoutErrors, up to 3 times
