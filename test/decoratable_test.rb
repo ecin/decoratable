@@ -2,12 +2,16 @@ require "minitest/autorun"
 require "minitest/pride"
 require "pry"
 
-require "aspectable"
+require "decoratable"
 
-describe Aspectable do
+describe Decoratable do
 
-  module Aspects
-    extend Aspectable
+  module Decorations
+    extend Decoratable
+
+    def override
+      binding.pry
+    end
 
     def retryable(tries = 1, options = { on: [RuntimeError] } )
       attempts = 0
@@ -24,7 +28,7 @@ describe Aspectable do
       current = Time.now
       yield
     ensure
-      original_method = __aspected_method__
+      original_method = __decorated_method__
       method_location, line = original_method.source_location
       marker = "#{original_method.owner}##{original_method.name}[#{method_location}:#{line}]"
       duration = (Time.now - current).round(2)
@@ -33,7 +37,7 @@ describe Aspectable do
     end
 
     def memoizable
-      key = :"@#{__aspected_method__.name}"
+      key = :"@#{__decorated_method__.name}"
 
       if instance_variable_defined?(key)
         instance_variable_get key
@@ -42,22 +46,31 @@ describe Aspectable do
       end
     end
 
+    def inspectable(logger = STDOUT)
+      puts
+      puts "*" * 80
+      puts __args__
+      puts __block__
+      puts "*" * 80
+      puts
+      yield
+    end
+
   end
 
   class Plant
-    extend Aspects
+    extend Decorations
 
-    def initialize
+    inspectable
+    def initialize(a = 5)
       @size = 0
+      @called = 0
     end
 
-    @@count = 0
-
-    retryable
-    measurable
+    override
     def call
-      @@count += 1
-      if @@count <= 1
+      @called += 1
+      if @called <= 1
         sleep 1
         raise
       else
@@ -72,15 +85,18 @@ describe Aspectable do
   end
 
   it "decorates a method" do
-    require "pry"
+    skip
     plant = Plant.new
     plant.grow
-    binding.pry
     Plant.new.call.must_equal true
   end
 
-  it "can define more than one aspect in the same module"
-  it "can use aspects in any order"
-  it "passes parameters along to aspects"
+  it "can define more than one decoration in the same module"
+  it "can use decorations in any order"
   it "only decorates the next defined method"
+  it "allows access to the original decorated method"
+  it "can decorate initialize" do
+    Plant.new(6) { puts "YAY" }
+  end
+  it "gives access to the arguments and blocks of the original method call"
 end
