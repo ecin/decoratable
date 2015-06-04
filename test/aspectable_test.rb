@@ -5,7 +5,7 @@ require "aspectable"
 
 describe Aspectable do
 
-  module Retryable
+  module Decorators
     extend Aspectable
 
     def retryable(tries = 1)
@@ -18,34 +18,35 @@ describe Aspectable do
         attempts > tries ? raise : retry
       end
     end
-  end
 
-  module Measurable
-    extend Aspectable
+    def debuggable
+      require "pry"
+      binding.pry
+      yield
+    end
 
     def measurable(logger = STDOUT)
       current = Time.now
       yield
-      logger.puts "Took #{Time.now - current} to run."
+    ensure
+      method_name = caller_locations(1,1)[0].label
+      duration = (Time.now - current).round(2)
+      logger.puts "Took #{duration}s to run."
     end
   end
 
   class Clumsy
-    extend Retryable
-    extend Measurable
+    extend Decorators
 
     @@count = 0
 
-    def self.method_added(method_name)
-    end
-
-    require "pry"
-
     retryable
     measurable
-    def call
+    debuggable
+    def call(arg)
       @@count += 1
       if @@count <= 1
+        sleep 2
         raise
       else
         true
@@ -57,8 +58,14 @@ describe Aspectable do
     end
   end
 
-  it "modifies a method" do
+  it "decorates a method" do
+    require "pry"
     binding.pry
     Clumsy.new.call.must_equal true
   end
+
+  it "can define more than one aspect in the same module"
+  it "can use aspects in any order"
+  it "passes parameters along to aspects"
+  it "only decorates the next defined method"
 end
