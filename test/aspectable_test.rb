@@ -1,67 +1,82 @@
 require "minitest/autorun"
 require "minitest/pride"
+require "pry"
 
 require "aspectable"
 
 describe Aspectable do
 
-  module Decorators
+  module Aspects
     extend Aspectable
 
-    def retryable(tries = 1)
+    def retryable(tries = 1, options = { on: [RuntimeError] } )
       attempts = 0
 
       begin
         yield
-      rescue
+      rescue *options[:on]
         attempts += 1
         attempts > tries ? raise : retry
       end
-    end
-
-    def debuggable
-      require "pry"
-      binding.pry
-      yield
     end
 
     def measurable(logger = STDOUT)
       current = Time.now
       yield
     ensure
-      method_name = caller_locations(1,1)[0].label
+      original_method = __aspected_method__
+      method_location, line = original_method.source_location
+      marker = "#{original_method.owner}##{original_method.name}[#{method_location}:#{line}]"
       duration = (Time.now - current).round(2)
-      logger.puts "Took #{duration}s to run."
+
+      logger.puts "#{marker} took #{duration}s to run."
     end
+
+    def memoizable
+      key = :"@#{__aspected_method__.name}"
+
+      if instance_variable_defined?(key)
+        instance_variable_get key
+      else
+        instance_variable_set key, yield
+      end
+    end
+
   end
 
-  class Clumsy
-    extend Decorators
+  class Plant
+    extend Aspects
+
+    def initialize
+      @size = 0
+    end
 
     @@count = 0
 
     retryable
     measurable
-    debuggable
-    def call(arg)
+    def call
       @@count += 1
       if @@count <= 1
-        sleep 2
+        sleep 1
         raise
       else
         true
       end
     end
 
-    def call2
-
+    memoizable
+    def grow(by = 1)
+      @size += by
     end
   end
 
   it "decorates a method" do
     require "pry"
+    plant = Plant.new
+    plant.grow
     binding.pry
-    Clumsy.new.call.must_equal true
+    Plant.new.call.must_equal true
   end
 
   it "can define more than one aspect in the same module"

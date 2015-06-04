@@ -11,12 +11,16 @@ require "thread"
 #   module Helpers
 #     extend Aspectable
 #
-#     def measurable(logger = STDOUT, &block)
+#     def measurable(logger = STDOUT)
 #       start = Time.now
 #       yield
 #     ensure
+#       original_method = @__aspected_method__
+#       method_location, line = original_method.source_location
+#       marker = "#{original_method.owner}##{original_method.name}[#{method_location}:#{line}]"
 #       duration = (Time.now - start).round(2)
-#       logger.puts "#{block.source_location.join(":")} took #{duration}s to run."
+#
+#       logger.puts "#{marker} took #{duration}s to run."
 #     end
 #
 #     def retryable(tries = 1, options = { on: [RuntimeError] } )
@@ -38,9 +42,9 @@ require "thread"
 #       end
 #     end
 #
-#     def memoizable(&block)
-#       method_name, _ = block.source_location
-#       key = :"@#{method_name}"
+#     def memoizable
+#       key = :"@#{@__aspected_method__.name}"
+#
 #       if defined?(key)
 #         instance_variable_get key
 #       else
@@ -78,31 +82,50 @@ module Aspectable
       aspect_method = instance_method(aspect_name)
 
       define_method(aspect_name) do |*args, &block|
-        # Wrap method_added to add aspect to the next method definition
+        # Wrap method_added to add aspect to the next method definition.
         self.singleton_class.instance_eval do
           alias_method "method_added_without_#{aspect_name}", :method_added
         end
 
+        unless method_defined?(:__aspected_method__)
+          define_method(:__aspected_method__) { @__aspected_method__ }
+        end
+
         define_singleton_method(:method_added) do |method_name|
+
           original_method = instance_method(method_name)
 
           decorator = Module.new do
-            define_method(method_name) do |*args, &block|
-              result = nil
-              aspect_method.bind(self).call do
-                result = original_method.bind(self).call(*args, &block)
+            self.singleton_class.instance_eval do
+              define_method(:name) do
+                "Aspectable::#{aspect_name}(#{method_name})"
               end
+
+              alias_method :inspect, :name
+              alias_method :to_s, :name
+            end
+
+            define_method(method_name) do |*args, &block|
+              # The aspect method should have access to the original
+              # method it's modifying.
+              @__aspected_method__ = original_method
+
+              result = aspect_method.bind(self).call do
+                super(*args, &block)
+              end
+
+              @__aspected_method__ = nil
               result
             end
           end
 
-          # Call aspect before "real" method
+          # Call aspect before "real" method.
           prepend decorator
 
-          # Call next method_added link in the chain
+          # Call next method_added link in the chain.
           __send__("method_added_without_#{aspect_name}", method_name)
 
-          # Remove ourselves from method_added chain
+          # Remove ourselves from method_added chain.
           self.singleton_class.instance_eval do
             alias_method "method_added", "method_added_without_#{aspect_name}"
           end
