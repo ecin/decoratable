@@ -3,13 +3,24 @@ require "thread"
 # Public: provide an easy way to define decorations
 # that add common behaviour to a method.
 #
-# More info on decorators as implemented in Python:
+# More info on decorations as implemented in Python:
 # http://en.wikipedia.org/wiki/Python_syntax_and_semantics#Decorators
 #
 # Examples
 #
-#   module Helpers
+#   module Decorations
 #     extend Decoratable
+#
+#     def retryable(tries = 1, options = { on: [RuntimeError] })
+#       attempts = 0
+#
+#       begin
+#         yield
+#       rescue *options[:on]
+#         attempts += 1
+#         attempts > tries ? raise : retry
+#       end
+#     end
 #
 #     def measurable(logger = STDOUT)
 #       start = Time.now
@@ -21,17 +32,6 @@ require "thread"
 #       duration = (Time.now - start).round(2)
 #
 #       logger.puts "#{marker} took #{duration}s to run."
-#     end
-#
-#     def retryable(tries = 1, options = { on: [RuntimeError] })
-#       attempts = 0
-#
-#       begin
-#         yield
-#       rescue *options[:on]
-#         attempts += 1
-#         attempts > tries ? raise : retry
-#       end
 #     end
 #
 #     def debuggable
@@ -58,7 +58,7 @@ require "thread"
 #   end
 #
 #   class Client
-#     extend Helpers
+#     extend Decorations
 #
 #     # Let's keep track of how long #get takes to run,
 #     # and memoize the return value
@@ -85,7 +85,7 @@ module Decoratable
 
       decoration_method = instance_method(decoration_name)
 
-      define_method(decoration_name) do |*args, &block|
+      define_method(decoration_name) do |*decorator_args|
         # Wrap method_added to decorate the next method definition.
         self.singleton_class.instance_eval do
           alias_method "method_added_without_#{decoration_name}", :method_added
@@ -127,7 +127,7 @@ module Decoratable
                 @__args__ = args
                 @__block__ = block
 
-                decoration_method.bind(self).call do
+                decoration_method.bind(self).call(*decorator_args) do
                   super(*args, &block)
                 end
               ensure
