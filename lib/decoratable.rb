@@ -91,6 +91,10 @@ module Decoratable
           alias_method "method_added_without_#{decoration_name}", :method_added
         end
 
+        unless method_defined?(:__original_caller__)
+          define_method(:__original_caller__) { @__original_caller__ }
+        end
+
         unless method_defined?(:__decorated_method__)
           define_method(:__decorated_method__) { @__decorated_method__ }
         end
@@ -126,6 +130,7 @@ module Decoratable
                 @__decorated_method__ = original_method
                 @__args__ = args
                 @__block__ = block
+                @__original_caller__ ||= caller
 
                 decoration_method.bind(self).call(*decorator_args) do
                   super(*args, &block)
@@ -134,6 +139,7 @@ module Decoratable
                 @__decorated_method__ = nil
                 @__args__ = nil
                 @__block__ = nil
+                @__original_caller__ = nil
               end
             end
           end
