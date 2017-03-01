@@ -142,7 +142,7 @@ describe Decoratable do
 
   def mock_logger
     logger = Minitest::Mock.new
-    logger.expect(:info, nil, [/took \d+\.\d+s to run/])
+    logger.expect(:info, nil, [/took \d+(\.\d+)?s to run/])
     logger
   end
 end
