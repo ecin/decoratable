@@ -96,5 +96,6 @@ Decoratable provides a handful of decorations as part of the gem:
   * require "decoratable/memoizable": automatically memoize the return value of a method
   * require "decoratable/pryable": open a Pry debug console (i.e. binding.pry) if an error is raised
   * require "decoratable/retryable": automatically retry a number of times when a specified exception is raised
+  * require "decoratable/synchronizable": only allow a method to be called once at a time
 
 More to be added as time goes on.
